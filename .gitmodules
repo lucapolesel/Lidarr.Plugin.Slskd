@@ -1,0 +1,4 @@
+[submodule "src/Lidarr"]
+	path = src/Lidarr
+	url = https://github.com/Lidarr/Lidarr
+	branch = plugins
