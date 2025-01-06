@@ -163,13 +163,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             var totalSize = directory.Files.Sum(file => file.Size);
             var bytesRemaining = directory.Files.Sum(file => file.BytesRemaining);
 
-            TimeSpan remainingTime;
+            TimeSpan? remainingTime = null;
 
-            if (averageSpeed <= 0)
-            {
-                remainingTime = bytesRemaining > 0 ? TimeSpan.MaxValue : TimeSpan.Zero;
-            }
-            else
+            if (averageSpeed > 0)
             {
                 remainingTime = TimeSpan.FromSeconds(bytesRemaining / averageSpeed);
             }
