@@ -181,9 +181,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             {
                 status = DownloadItemStatus.Queued;
             }
-            else if (statuses.Any(s => s == DownloadItemStatus.Downloading))
+            else if (statuses.Any(s => s == DownloadItemStatus.Failed))
             {
-                status = DownloadItemStatus.Downloading;
+                status = DownloadItemStatus.Failed;
             }
             else if (statuses.All(s => s == DownloadItemStatus.Completed))
             {
@@ -191,7 +191,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
             else
             {
-                status = DownloadItemStatus.Failed;
+                status = DownloadItemStatus.Downloading;
             }
 
             // Compute a DownloadId based off the directory
