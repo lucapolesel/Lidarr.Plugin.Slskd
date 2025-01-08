@@ -210,7 +210,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             // Slskd trims down everything like username and only outputs to the last path
             var downloadsPath = options.Directories.Downloads;
-            var releasePath = Path.GetFileName(directory.Directory);
+            var releasePath = directory.Directory[(directory.Directory.LastIndexOf('\\') + 1) ..];
 
             var outputPath = Path.Combine(downloadsPath, releasePath!);
 
@@ -290,7 +290,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             // We only want the files that are in the requested directory
             var filesToDownload = userResponse.Files
-                .GroupBy(f => Path.GetDirectoryName(f.Filename))
+                .GroupBy(f => f.Filename[..f.Filename.LastIndexOf('\\')])
                 .FirstOrDefault(g => Md5StringConverter.ComputeMd5(g.Key) == releaseId);
 
             if (filesToDownload == null)

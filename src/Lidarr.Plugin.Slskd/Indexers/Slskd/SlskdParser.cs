@@ -62,11 +62,18 @@ namespace NzbDrone.Core.Indexers.Slskd
 
                 // Group each file by their directory since a user might have different releases
                 var directories = r.Files
-                    .GroupBy(f => Path.GetDirectoryName(f.Filename))
+                    .GroupBy(f => f.Filename[..f.Filename.LastIndexOf('\\')])
                     .ToList();
 
                 foreach (var dir in directories)
                 {
+                    // Just to be sure
+                    if (string.IsNullOrEmpty(dir.Key))
+                    {
+                        // TODO: Throw an exception
+                        continue;
+                    }
+
                     // Generate a MD5 hash for this directory so we can later use it to identify the files we need
                     var releaseHash = Md5StringConverter.ComputeMd5(dir.Key);
 
