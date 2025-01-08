@@ -30,7 +30,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         List<SlskdDownloadEntry> GetAllDownloads(SlskdSettings settings);
         List<DownloadClientItem> GetQueue(SlskdSettings settings);
         string Download(SlskdSettings settings, ReleaseInfo release);
-        void RemoveDownload(SlskdSettings settings, string username, string downloadId);
+        void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false);
         void RemoveFromQueue(SlskdSettings settings, DownloadClientItem downloadItem);
         public void Authenticate(SlskdSettings settings);
         public void Authenticate(SlskdIndexerSettings settings);
@@ -231,11 +231,11 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return item;
         }
 
-        public void RemoveDownload(SlskdSettings settings, string username, string downloadId)
+        public void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/transfers/downloads/{username}/{downloadId}")
-                .AddQueryParam("remove", true);
+                .AddQueryParam("remove", remove);
             request.Method = HttpMethod.Delete;
             ProcessRequest(request);
         }
@@ -254,7 +254,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
                 foreach (var file in filesToRemove)
                 {
-                    RemoveDownload(settings, entry.Username, file.Id);
+                    // TODO: We have to cancel the download before actually removing it or slskd would return an error
+                    // TODO: Check the file status and either just cancel or remove it
+                    CancelDownload(settings, entry.Username, file.Id, false);
                 }
             }
         }
