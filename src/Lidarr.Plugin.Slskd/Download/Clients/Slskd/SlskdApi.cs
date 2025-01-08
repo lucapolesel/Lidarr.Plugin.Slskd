@@ -92,6 +92,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         [JsonProperty("bitDepth")]
         public int? BitDepth { get; set; }
 
+        [JsonProperty("bitRate")]
+        public int? BitRate { get; set; }
+
         [JsonProperty("code")]
         public int Code { get; set; }
 
@@ -101,6 +104,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         [JsonProperty("filename")]
         public string Filename { get; set; }
 
+        [JsonProperty("isVariableBitRate")]
+        public bool? IsVariableBitRate { get; set; }
+
         [JsonProperty("length")]
         public int? Length { get; set; }
 
@@ -108,16 +114,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public int? SampleRate { get; set; }
 
         [JsonProperty("size")]
-        public int Size { get; set; }
+        public long Size { get; set; }
 
         [JsonProperty("isLocked")]
         public bool IsLocked { get; set; }
-
-        [JsonProperty("bitRate")]
-        public int? BitRate { get; set; }
-
-        [JsonProperty("isVariableBitRate")]
-        public bool? IsVariableBitRate { get; set; }
     }
 
     public class SlskdResponse
@@ -138,7 +138,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public List<SlskdResponseFile> LockedFiles { get; set; }
 
         [JsonProperty("queueLength")]
-        public int QueueLength { get; set; }
+        public long QueueLength { get; set; }
 
         [JsonProperty("token")]
         public int Token { get; set; }
@@ -217,10 +217,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public string Filename { get; set; }
 
         [JsonProperty("size")]
-        public int Size { get; set; }
+        public long Size { get; set; }
 
         [JsonProperty("startOffset")]
-        public int StartOffset { get; set; }
+        public long StartOffset { get; set; }
 
         [JsonProperty("state")]
         public SlskdFileStatus State { get; set; }
@@ -229,30 +229,36 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public DateTime RequestedAt { get; set; }
 
         [JsonProperty("enqueuedAt")]
-        public DateTime EnqueuedAt { get; set; }
+        public DateTime? EnqueuedAt { get; set; }
 
         [JsonProperty("startedAt")]
-        public DateTime StartedAt { get; set; }
+        public DateTime? StartedAt { get; set; }
 
         [JsonProperty("endedAt")]
-        public DateTime EndedAt { get; set; }
+        public DateTime? EndedAt { get; set; }
 
         [JsonProperty("bytesTransferred")]
-        public int BytesTransferred { get; set; }
+        public long BytesTransferred { get; set; }
 
         [JsonProperty("averageSpeed")]
         public double AverageSpeed { get; set; }
 
+        [JsonProperty("placedInQueue")]
+        public int? PlacedInQueue { get; set; }
+
+        [JsonProperty("exception")]
+        public string Exception { get; set; }
+
         [JsonProperty("bytesRemaining")]
-        public int BytesRemaining { get; set; }
+        public long BytesRemaining { get; set; }
 
         [JsonProperty("elapsedTime")]
-        public TimeSpan ElapsedTime { get; set; }
+        public TimeSpan? ElapsedTime { get; set; }
 
         [JsonProperty("percentComplete")]
-        public float PercentComplete { get; set; }
+        public double PercentComplete { get; set; }
 
         [JsonProperty("remainingTime")]
-        public TimeSpan RemainingTime { get; set; }
+        public TimeSpan? RemainingTime { get; set; }
     }
 }
