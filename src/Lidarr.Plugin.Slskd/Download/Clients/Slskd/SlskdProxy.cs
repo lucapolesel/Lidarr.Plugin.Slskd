@@ -167,7 +167,13 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             if (averageSpeed > 0)
             {
-                remainingTime = TimeSpan.FromSeconds(bytesRemaining / averageSpeed);
+                var tmpRemainingTime = TimeSpan.FromSeconds(bytesRemaining / averageSpeed);
+
+                // Just to make sure we don't go past a certain threshold
+                if (tmpRemainingTime.TotalDays < 2)
+                {
+                    remainingTime = tmpRemainingTime;
+                }
             }
 
             // TODO: This is wrong so fix it later (I forgot why it's wrong)
