@@ -321,6 +321,8 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             // Retrieve the list of files to download
             var sResponses = GetSearchResponses(settings, searchId);
 
+            // We can remove the search entry at this point
+            DeleteSearch(settings, searchId);
 
             // Find the Responses for that specific user
             var userResponse = sResponses.FirstOrDefault(r => r.Username == username);

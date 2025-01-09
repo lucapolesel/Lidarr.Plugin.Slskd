@@ -140,6 +140,12 @@ namespace NzbDrone.Core.Indexers.Slskd
                 }
             }
 
+            // Delete the search entry if no results
+            if (torrentInfos.Count == 0)
+            {
+                Proxy.DeleteSearch(Settings, entry.Id);
+            }
+
             // Order by size
             return
                 torrentInfos
