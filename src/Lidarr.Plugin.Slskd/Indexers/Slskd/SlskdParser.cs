@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Web;
 using NLog;
 using NzbDrone.Common.Crypto;
 using NzbDrone.Common.Http;
@@ -42,8 +44,11 @@ namespace NzbDrone.Core.Indexers.Slskd
             var entry = jsonResponse.Resource;
 
             // NOTE: This is the simplest method to pass data I could think of (Slskd doesn't care about extra headers anyway)
-            var artistName = request.HttpRequest.Headers["SLSKD-ARTIST"];
-            var albumName = request.HttpRequest.Headers["SLSKD-ALBUM"];
+            var artistNameHeader = request.HttpRequest.Headers["SLSKD-ARTIST"];
+            var albumNameHeader = request.HttpRequest.Headers["SLSKD-ALBUM"];
+
+            var artistName = HttpUtility.UrlDecode(artistNameHeader, Encoding.UTF8);
+            var albumName = HttpUtility.UrlDecode(albumNameHeader, Encoding.UTF8);
 
             foreach (var r in entry.Responses)
             {

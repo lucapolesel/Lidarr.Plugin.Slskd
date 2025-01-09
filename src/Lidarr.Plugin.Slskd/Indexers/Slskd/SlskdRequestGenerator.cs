@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
+using System.Web;
 using NLog;
 using NzbDrone.Core.Download.Clients.Slskd;
 using NzbDrone.Core.IndexerSearch.Definitions;
@@ -84,8 +86,8 @@ namespace NzbDrone.Core.Indexers.Slskd
             // instead of having to sanitize the results (just a lil test)
             var request = Proxy
                 .BuildSearchEntryRequest(Settings, searchResponse.Id)
-                .SetHeader("SLSKD-ARTIST", artistQuery)
-                .SetHeader("SLSKD-ALBUM", albumQuery)
+                .SetHeader("SLSKD-ARTIST", HttpUtility.UrlEncode(artistQuery, Encoding.UTF8))
+                .SetHeader("SLSKD-ALBUM", HttpUtility.UrlEncode(albumQuery, Encoding.UTF8))
                 .Build();
 
             yield return new IndexerRequest(request);
