@@ -85,12 +85,12 @@ namespace NzbDrone.Core.Indexers.Slskd
                     // TODO: It shouldn't happen but check the file paths to make sure that they are from the same directory
                     var rInfo = new ReleaseInfo
                     {
-                        Guid = $"Slskd-{releaseHash}-{r.Username}",
+                        Guid = $"Slskd-{releaseHash}",
                         Artist = artistName,
                         Album = albumName,
                         Title = title,
-                        InfoUrl = $"/api/v0/searches/{entry.Id}/responses",
-                        DownloadUrl = $"/api/v0/transfers/downloads/{r.Username}",
+                        InfoUrl = entry.Id,
+                        DownloadUrl = r.Username,
                         DownloadProtocol = nameof(SlskdDownloadProtocol),
                     };
 
@@ -140,7 +140,7 @@ namespace NzbDrone.Core.Indexers.Slskd
                 }
             }
 
-            // order by date
+            // Order by size
             return
                 torrentInfos
                     .OrderByDescending(o => o.Size)

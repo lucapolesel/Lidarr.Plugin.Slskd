@@ -24,12 +24,15 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
         JsonRequestBuilder BuildSearchEntryRequest(SlskdIndexerSettings settings, string searchId);
         SlskdSearchEntry GetSearchEntry(SlskdIndexerSettings settings, string searchId);
+        List<SlskdResponse> GetSearchResponses(SlskdSettings settings, string searchId);
         List<SlskdSearchEntry> GetSearches(SlskdIndexerSettings settings);
         void DeleteSearch(SlskdIndexerSettings settings, string searchId);
         void DeleteAllSearches(SlskdIndexerSettings settings);
+        void DeleteSearch(SlskdSettings settings, string searchId);
         List<SlskdDownloadEntry> GetAllDownloads(SlskdSettings settings);
         List<DownloadClientItem> GetQueue(SlskdSettings settings);
         string Download(SlskdSettings settings, ReleaseInfo release);
+        bool DownloadFiles(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload);
         void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false);
         void RemoveFromQueue(SlskdSettings settings, DownloadClientItem downloadItem);
         public void Authenticate(SlskdSettings settings);
@@ -84,6 +87,14 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return ProcessRequest<SlskdSearchEntry>(request);
         }
 
+        public List<SlskdResponse> GetSearchResponses(SlskdSettings settings, string searchId)
+        {
+            var sEntry = BuildRequest(settings)
+                .Resource($"/api/v0/searches/{searchId}/responses");
+
+            return ProcessRequest<List<SlskdResponse>>(sEntry);
+        }
+
         public List<SlskdSearchEntry> GetSearches(SlskdIndexerSettings settings)
         {
             var request = BuildRequest(settings)
@@ -107,6 +118,16 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             {
                 DeleteSearch(settings, sEntry.Id);
             }
+        }
+
+        public void DeleteSearch(SlskdSettings settings, string searchId)
+        {
+            var request = BuildRequest(settings)
+                .Resource($"/api/v0/searches/{searchId}");
+
+            request.Method = HttpMethod.Delete;
+
+            ProcessRequest(request);
         }
 
         public List<SlskdDownloadEntry> GetAllDownloads(SlskdSettings settings)
@@ -237,6 +258,19 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return item;
         }
 
+        public bool DownloadFiles(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload)
+        {
+            var request = BuildRequest(settings)
+                .Resource($"/api/v0/transfers/downloads/{username}")
+                .Post();
+
+            var json = JsonConvert.SerializeObject(filesToDownload);
+
+            request.SetJsonData(json);
+
+            return ProcessRequest(request).StatusCode == HttpStatusCode.Created;
+        }
+
         public void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false)
         {
             var request = BuildRequest(settings)
@@ -270,7 +304,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public string Download(SlskdSettings settings, ReleaseInfo release)
         {
             // Parse the guid
-            var matches = Regex.Match(release.Guid, @"(Slskd)-(.+)-(.+)");
+            var matches = Regex.Match(release.Guid, "(Slskd)-(.+)");
 
             var slskd = matches.Groups[1].Value;
 
@@ -280,13 +314,13 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             var releaseId = matches.Groups[2].Value;
-            var username = matches.Groups[3].Value;
+
+            var searchId = release.InfoUrl;
+            var username = release.DownloadUrl;
 
             // Retrieve the list of files to download
-            var sEntry = BuildRequest(settings)
-                .Resource(release.InfoUrl);
+            var sResponses = GetSearchResponses(settings, searchId);
 
-            var sResponses = ProcessRequest<List<SlskdResponse>>(sEntry);
 
             // Find the Responses for that specific user
             var userResponse = sResponses.FirstOrDefault(r => r.Username == username);
@@ -299,7 +333,8 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             // We only want the files that are in the requested directory
             var filesToDownload = userResponse.Files
                 .GroupBy(f => f.Filename[..f.Filename.LastIndexOf('\\')])
-                .FirstOrDefault(g => Md5StringConverter.ComputeMd5(g.Key) == releaseId);
+                .FirstOrDefault(g => Md5StringConverter.ComputeMd5(g.Key) == releaseId)?
+                .ToList();
 
             if (filesToDownload == null)
             {
@@ -307,24 +342,14 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             // Send the download request
-            var request = BuildRequest(settings)
-                .Resource(release.DownloadUrl)
-                .Post();
-
-            var json = JsonConvert.SerializeObject(filesToDownload);
-
-            request.SetJsonData(json);
-
-            var response = ProcessRequest(request);
-
-            if (response.StatusCode == HttpStatusCode.Created)
+            if (!DownloadFiles(settings, username, filesToDownload))
             {
-                _logger.Trace("Downloading item {0}", releaseId);
-
-                return releaseId;
+                throw new DownloadClientException("Error adding item to Slskd.");
             }
 
-            throw new DownloadClientException("Error adding item to Slskd: StatusCode {0}", response.StatusCode);
+            _logger.Trace("Downloading item {0}", releaseId);
+
+            return releaseId;
         }
 
         private JsonRequestBuilder BuildRequest(SlskdSettings settings)
