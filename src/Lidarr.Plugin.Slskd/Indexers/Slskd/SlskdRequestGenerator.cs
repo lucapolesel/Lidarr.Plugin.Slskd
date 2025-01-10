@@ -70,7 +70,7 @@ namespace NzbDrone.Core.Indexers.Slskd
             // Check the status and monitor it until it is completed
             var state = searchResponse.State;
 
-            while (state < SlskdFileStatus.CompletedSucceeded)
+            while (state < SlskdStates.CompletedSucceeded)
             {
                 // Wait a bit before making another request
                 // TODO: Is this a good idea? Should we do this later on?

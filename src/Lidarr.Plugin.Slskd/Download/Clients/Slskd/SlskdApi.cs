@@ -81,7 +81,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public DateTime StartedAt { get; set; }
 
         [JsonProperty("state")]
-        public SlskdFileStatus State { get; set; }
+        public SlskdStates State { get; set; }
 
         [JsonProperty("token")]
         public int Token { get; set; }
@@ -172,7 +172,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum SlskdFileStatus
+    public enum SlskdStates
     {
         [EnumMember(Value = "None")]
         None,
@@ -223,7 +223,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         public long StartOffset { get; set; }
 
         [JsonProperty("state")]
-        public SlskdFileStatus State { get; set; }
+        public SlskdStates State { get; set; }
 
         [JsonProperty("requestedAt")]
         public DateTime RequestedAt { get; set; }

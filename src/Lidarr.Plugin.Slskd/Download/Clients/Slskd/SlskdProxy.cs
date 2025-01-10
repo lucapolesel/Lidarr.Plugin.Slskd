@@ -155,17 +155,17 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
         private static DownloadItemStatus GetFileDownloadStatus(SlskdFile file)
         {
-            if (file.State < SlskdFileStatus.InProgress)
+            if (file.State < SlskdStates.InProgress)
             {
                 return DownloadItemStatus.Queued;
             }
 
-            if (file.State == SlskdFileStatus.InProgress)
+            if (file.State == SlskdStates.InProgress)
             {
                 return DownloadItemStatus.Downloading;
             }
 
-            if (file.State == SlskdFileStatus.CompletedSucceeded)
+            if (file.State == SlskdStates.CompletedSucceeded)
             {
                 return DownloadItemStatus.Completed;
             }
