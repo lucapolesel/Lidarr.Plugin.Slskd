@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Crypto;
@@ -21,6 +20,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
     public interface ISlskdProxy
     {
         SlskdOptions GetOptions(SlskdSettings settings);
+        JsonRequestBuilder BuildSearchRequest(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
         SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
         JsonRequestBuilder BuildSearchEntryRequest(SlskdIndexerSettings settings, string searchId);
         SlskdSearchEntry GetSearchEntry(SlskdIndexerSettings settings, string searchId);
@@ -61,16 +61,20 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return ProcessRequest<SlskdOptions>(request);
         }
 
-        public SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
+        public JsonRequestBuilder BuildSearchRequest(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
         {
             var request = BuildRequest(settings)
                 .Resource("/api/v0/searches")
                 .Post();
 
-            var json = JsonConvert.SerializeObject(requestData);
+            request.SetJsonData(requestData.ToJson());
 
-            request.SetJsonData(json);
+            return request;
+        }
 
+        public SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
+        {
+            var request = BuildSearchRequest(settings, requestData);
             return ProcessRequest<SlskdSearchEntry>(request);
         }
 
@@ -264,9 +268,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
                 .Resource($"/api/v0/transfers/downloads/{username}")
                 .Post();
 
-            var json = JsonConvert.SerializeObject(filesToDownload);
-
-            request.SetJsonData(json);
+            request.SetJsonData(filesToDownload.ToJson());
 
             return ProcessRequest(request).StatusCode == HttpStatusCode.Created;
         }

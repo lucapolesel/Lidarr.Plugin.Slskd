@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using System.Web;
 using NLog;
 using NzbDrone.Core.Download.Clients.Slskd;
@@ -60,32 +59,16 @@ namespace NzbDrone.Core.Indexers.Slskd
                 MaximumPeerQueueLength = 1000000,
                 MinimumPeerUploadSpeed = 0,
                 MinimumResponseFileCount = 1,
-                ResponseLimit = 100,
+                ResponseLimit = PageSize,
                 SearchText = searchQuery,
                 SearchTimeout = 15000,
             };
-
-            var searchResponse = Proxy.Search(Settings, searchData);
-
-            // Check the status and monitor it until it is completed
-            var state = searchResponse.State;
-
-            while (state < SlskdStates.CompletedSucceeded)
-            {
-                // Wait a bit before making another request
-                // TODO: Is this a good idea? Should we do this later on?
-                Task.Delay(1000).Wait();
-
-                var response = Proxy.GetSearchEntry(Settings, searchResponse.Id);
-
-                state = response.State;
-            }
 
             // Search should be completed by now so build the final request
             // Also append the Artist and Album as headers so we can re-use them during parsing
             // instead of having to sanitize the results (just a lil test)
             var request = Proxy
-                .BuildSearchEntryRequest(Settings, searchResponse.Id)
+                .BuildSearchRequest(Settings, searchData)
                 .SetHeader("SLSKD-ARTIST", HttpUtility.UrlEncode(artistQuery, Encoding.UTF8))
                 .SetHeader("SLSKD-ALBUM", HttpUtility.UrlEncode(albumQuery, Encoding.UTF8))
                 .Build();

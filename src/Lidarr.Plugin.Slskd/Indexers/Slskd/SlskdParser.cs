@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web;
 using NLog;
 using NzbDrone.Common.Crypto;
-using NzbDrone.Common.Http;
+using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Download.Clients.Slskd;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
@@ -38,11 +39,6 @@ namespace NzbDrone.Core.Indexers.Slskd
 
             var request = response.Request;
 
-            var jsonResponse = new HttpResponse<SlskdSearchEntry>(response.HttpResponse);
-
-            // TODO: Check to make sure about its status
-            var entry = jsonResponse.Resource;
-
             // NOTE: This is the simplest method to pass data I could think of (Slskd doesn't care about extra headers anyway)
             var artistNameHeader = request.HttpRequest.Headers["SLSKD-ARTIST"];
             var albumNameHeader = request.HttpRequest.Headers["SLSKD-ALBUM"];
@@ -50,7 +46,23 @@ namespace NzbDrone.Core.Indexers.Slskd
             var artistName = HttpUtility.UrlDecode(artistNameHeader, Encoding.UTF8);
             var albumName = HttpUtility.UrlDecode(albumNameHeader, Encoding.UTF8);
 
-            foreach (var r in entry.Responses)
+            var searchResponse = Json.Deserialize<SlskdSearchEntry>(response.Content);
+
+            SlskdSearchEntry searchEntry;
+
+            // Keep monitoring the search entry until it has finished
+            do
+            {
+                // Wait a bit before making another request
+                Task.Delay(1000).Wait();
+
+                // Retrieve the search entry with its responses
+                searchEntry = Proxy.GetSearchEntry(Settings, searchResponse.Id);
+            }
+            while (searchEntry.State < SlskdStates.CompletedSucceeded); // TODO: Check what to do in case it fails
+
+            // Parse each response
+            foreach (var r in searchEntry.Responses)
             {
                 // Skip those entries that got no files
                 if (r.FileCount == 0)
@@ -89,7 +101,7 @@ namespace NzbDrone.Core.Indexers.Slskd
                         Artist = artistName,
                         Album = albumName,
                         Title = title,
-                        InfoUrl = entry.Id,
+                        InfoUrl = searchEntry.Id,
                         DownloadUrl = r.Username,
                         DownloadProtocol = nameof(SlskdDownloadProtocol),
                     };
@@ -143,7 +155,7 @@ namespace NzbDrone.Core.Indexers.Slskd
             // Delete the search entry if no results
             if (torrentInfos.Count == 0)
             {
-                Proxy.DeleteSearch(Settings, entry.Id);
+                Proxy.DeleteSearch(Settings, searchEntry.Id);
             }
 
             // Order by size
