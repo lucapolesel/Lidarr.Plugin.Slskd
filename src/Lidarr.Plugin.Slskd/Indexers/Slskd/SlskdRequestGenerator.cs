@@ -30,8 +30,23 @@ namespace NzbDrone.Core.Indexers.Slskd
         {
             var chain = new IndexerPageableRequestChain();
 
-            // TODO: For some is better to just use the album as search query (ex: old ye albums on which he was still being called Kanye)
+            // Lidarr provides us all the artist metadata
+            var artistMetadata = searchCriteria.Artist.Metadata.Value;
+
+            // Chain the first request with 'base' queries
             chain.AddTier(GetRequests(searchCriteria.ArtistQuery, searchCriteria.AlbumQuery));
+
+            // Some artists may have more aliases so chain a request for each of them
+            var aliases = artistMetadata.Aliases;
+
+            // Remove the previous alias if present
+            aliases.Remove(searchCriteria.ArtistQuery);
+
+            foreach (var alias in aliases)
+            {
+                // TODO: Should we always return the current artist's alias? Lidarr seems to detect it from what I've tested so far
+                chain.AddTier(GetRequests(alias, searchCriteria.AlbumQuery));
+            }
 
             return chain;
         }
