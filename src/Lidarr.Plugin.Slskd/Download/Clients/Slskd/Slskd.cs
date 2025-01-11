@@ -33,7 +33,8 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
         public override IEnumerable<DownloadClientItem> GetItems()
         {
-            var queue = _proxy.GetQueue(Settings);
+            var queue = _proxy.GetQueueAsync(Settings)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
 
             foreach (var item in queue)
             {
@@ -51,18 +52,19 @@ namespace NzbDrone.Core.Download.Clients.Slskd
                 DeleteItemData(item);
             }
 
-            _proxy.RemoveFromQueueAsync(Settings, item).Wait();
+            _ = _proxy.RemoveFromQueueAsync(Settings, item);
         }
 
-        public override Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer)
+        public override async Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer)
         {
             var release = remoteAlbum.Release;
-            return Task.FromResult(_proxy.Download(Settings, release));
+
+            return await _proxy.DownloadAsync(Settings, release).ConfigureAwait(false);
         }
 
         public override DownloadClientInfo GetStatus()
         {
-            var config = _proxy.GetOptions(Settings);
+            var config = _proxy.GetOptionsAsync(Settings).GetAwaiter().GetResult();
 
             return new DownloadClientInfo
             {
@@ -80,7 +82,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         {
             try
             {
-                _proxy.Authenticate(Settings);
+                _proxy.AuthenticateAsync(Settings).Wait();
             }
             catch (DownloadClientException)
             {

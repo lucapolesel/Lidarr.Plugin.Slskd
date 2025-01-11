@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Web;
 using NLog;
 using NzbDrone.Common.Crypto;
@@ -48,18 +48,16 @@ namespace NzbDrone.Core.Indexers.Slskd
 
             var searchResponse = Json.Deserialize<SlskdSearchEntry>(response.Content);
 
-            SlskdSearchEntry searchEntry;
+            // Wait for the search to complete
+            var searchEntry = Proxy.WaitSearchToComplete(Settings, searchResponse.Id)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
 
-            // Keep monitoring the search entry until it has finished
-            do
+            // TODO: Check what to do in case it fails
+            if (searchEntry.State > SlskdStates.CompletedSucceeded)
             {
-                // Wait a bit before making another request
-                Task.Delay(1000).Wait();
-
-                // Retrieve the search entry with its responses
-                searchEntry = Proxy.GetSearchEntry(Settings, searchResponse.Id);
+                // Delete it since it failed
+                _ = Proxy.DeleteSearchAsync(Settings, searchEntry.Id);
             }
-            while (searchEntry.State < SlskdStates.CompletedSucceeded); // TODO: Check what to do in case it fails
 
             // Parse each response
             foreach (var r in searchEntry.Responses)
@@ -155,7 +153,7 @@ namespace NzbDrone.Core.Indexers.Slskd
             // Delete the search entry if no results
             if (torrentInfos.Count == 0)
             {
-                Proxy.DeleteSearch(Settings, searchEntry.Id);
+                _ = Proxy.DeleteSearchAsync(Settings, searchEntry.Id);
             }
 
             // Order by size
@@ -167,7 +165,7 @@ namespace NzbDrone.Core.Indexers.Slskd
 
         private static FileQualityInfo GuessFileQuality(SlskdResponseFile file)
         {
-            var extension = Path.GetExtension(file.Filename)?.TrimStart('.').ToUpper();
+            var extension = Path.GetExtension(file.Filename)?.TrimStart('.').ToUpper(CultureInfo.InvariantCulture);
 
             // NOTE: I wanted to use QualityParser.FindQuality but it's private
             // TODO: Implement more types

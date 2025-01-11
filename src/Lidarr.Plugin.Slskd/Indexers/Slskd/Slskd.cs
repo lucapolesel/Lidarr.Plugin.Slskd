@@ -43,7 +43,8 @@ namespace NzbDrone.Core.Indexers.Slskd
 
         public override IParseIndexerResponse GetParser()
         {
-            _slskdProxy.Authenticate(Settings);
+            _slskdProxy.AuthenticateAsync(Settings)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
 
             return new SlskdParser
             {

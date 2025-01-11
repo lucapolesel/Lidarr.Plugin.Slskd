@@ -20,25 +20,27 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 {
     public interface ISlskdProxy
     {
-        SlskdOptions GetOptions(SlskdSettings settings);
+        Task<SlskdOptions> GetOptionsAsync(SlskdSettings settings);
         JsonRequestBuilder BuildSearchRequest(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
-        SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
+        Task<SlskdSearchEntry> SearchAsync(SlskdIndexerSettings settings, SlskdSearchRequest requestData);
         JsonRequestBuilder BuildSearchEntryRequest(SlskdIndexerSettings settings, string searchId);
-        SlskdSearchEntry GetSearchEntry(SlskdIndexerSettings settings, string searchId);
-        List<SlskdResponse> GetSearchResponses(SlskdSettings settings, string searchId);
-        List<SlskdSearchEntry> GetSearches(SlskdIndexerSettings settings);
-        void DeleteSearch(SlskdIndexerSettings settings, string searchId);
-        void DeleteAllSearches(SlskdIndexerSettings settings);
-        void DeleteSearch(SlskdSettings settings, string searchId);
-        List<SlskdDownloadEntry> GetAllDownloads(SlskdSettings settings);
-        List<DownloadClientItem> GetQueue(SlskdSettings settings);
-        string Download(SlskdSettings settings, ReleaseInfo release);
-        bool DownloadFiles(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload);
-        SlskdFile GetDownload(SlskdSettings settings, string username, string downloadId);
-        void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false);
+        Task<SlskdSearchEntry> GetSearchEntryAsync(SlskdIndexerSettings settings, string searchId);
+        Task<List<SlskdResponse>> GetSearchResponsesAsync(SlskdSettings settings, string searchId);
+        Task<List<SlskdSearchEntry>> GetSearchesAsync(SlskdIndexerSettings settings);
+        Task<SlskdSearchEntry> WaitSearchToComplete(SlskdIndexerSettings settings, string searchId);
+        Task DeleteSearchAsync(SlskdIndexerSettings settings, string searchId);
+        Task DeleteAllSearchesAsync(SlskdIndexerSettings settings);
+        Task DeleteSearchAsync(SlskdSettings settings, string searchId);
+        Task<List<SlskdDownloadEntry>> GetAllDownloadsAsync(SlskdSettings settings);
+        Task<List<DownloadClientItem>> GetQueueAsync(SlskdSettings settings);
+        Task<string> DownloadAsync(SlskdSettings settings, ReleaseInfo release);
+        Task<bool> DownloadFilesAsync(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload);
+        Task<SlskdFile> GetDownloadAsync(SlskdSettings settings, string username, string downloadId);
+        Task<SlskdFile> WaitDownloadToCompleteAsync(SlskdSettings settings, string username, string downloadId);
+        Task CancelDownloadAsync(SlskdSettings settings, string username, string downloadId, bool remove = false);
         Task RemoveFromQueueAsync(SlskdSettings settings, DownloadClientItem downloadItem);
-        public void Authenticate(SlskdSettings settings);
-        public void Authenticate(SlskdIndexerSettings settings);
+        Task AuthenticateAsync(SlskdSettings settings);
+        Task AuthenticateAsync(SlskdIndexerSettings settings);
     }
 
     public class SlskdProxy : ISlskdProxy
@@ -57,10 +59,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             _historyService = historyService;
         }
 
-        public SlskdOptions GetOptions(SlskdSettings settings)
+        public async Task<SlskdOptions> GetOptionsAsync(SlskdSettings settings)
         {
             var request = BuildRequest(settings).Resource("/api/v0/options");
-            return ProcessRequest<SlskdOptions>(request);
+            return await ProcessRequestAsync<SlskdOptions>(request).ConfigureAwait(false);
         }
 
         public JsonRequestBuilder BuildSearchRequest(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
@@ -74,10 +76,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return request;
         }
 
-        public SlskdSearchEntry Search(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
+        public async Task<SlskdSearchEntry> SearchAsync(SlskdIndexerSettings settings, SlskdSearchRequest requestData)
         {
             var request = BuildSearchRequest(settings, requestData);
-            return ProcessRequest<SlskdSearchEntry>(request);
+            return await ProcessRequestAsync<SlskdSearchEntry>(request).ConfigureAwait(false);
         }
 
         public JsonRequestBuilder BuildSearchEntryRequest(SlskdIndexerSettings settings, string searchId)
@@ -87,67 +89,87 @@ namespace NzbDrone.Core.Download.Clients.Slskd
                 .AddQueryParam("includeResponses", true);
         }
 
-        public SlskdSearchEntry GetSearchEntry(SlskdIndexerSettings settings, string searchId)
+        public async Task<SlskdSearchEntry> GetSearchEntryAsync(SlskdIndexerSettings settings, string searchId)
         {
             var request = BuildSearchEntryRequest(settings, searchId);
-            return ProcessRequest<SlskdSearchEntry>(request);
+            return await ProcessRequestAsync<SlskdSearchEntry>(request).ConfigureAwait(false);
         }
 
-        public List<SlskdResponse> GetSearchResponses(SlskdSettings settings, string searchId)
+        public async Task<List<SlskdResponse>> GetSearchResponsesAsync(SlskdSettings settings, string searchId)
         {
             var sEntry = BuildRequest(settings)
                 .Resource($"/api/v0/searches/{searchId}/responses");
 
-            return ProcessRequest<List<SlskdResponse>>(sEntry);
+            return await ProcessRequestAsync<List<SlskdResponse>>(sEntry).ConfigureAwait(false);
         }
 
-        public List<SlskdSearchEntry> GetSearches(SlskdIndexerSettings settings)
+        public async Task<List<SlskdSearchEntry>> GetSearchesAsync(SlskdIndexerSettings settings)
         {
             var request = BuildRequest(settings)
                 .Resource("/api/v0/searches");
-            return ProcessRequest<List<SlskdSearchEntry>>(request);
+            return await ProcessRequestAsync<List<SlskdSearchEntry>>(request).ConfigureAwait(false);
         }
 
-        public void DeleteSearch(SlskdIndexerSettings settings, string searchId)
+        public async Task<SlskdSearchEntry> WaitSearchToComplete(SlskdIndexerSettings settings, string searchId)
+        {
+            SlskdSearchEntry searchEntry;
+
+            // Keep monitoring the search entry until it has finished
+            do
+            {
+                // Retrieve the search entry with its responses
+                searchEntry = await GetSearchEntryAsync(settings, searchId).ConfigureAwait(false);
+
+                // Wait a bit before making another request
+                await Task.Delay(1000).ConfigureAwait(false);
+            }
+            while (searchEntry.State < SlskdStates.CompletedSucceeded);
+
+            return searchEntry;
+        }
+
+        public async Task DeleteSearchAsync(SlskdIndexerSettings settings, string searchId)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/searches/{searchId}");
 
             request.Method = HttpMethod.Delete;
 
-            ProcessRequest(request);
+            await ProcessRequestAsync(request).ConfigureAwait(false);
         }
 
-        public void DeleteAllSearches(SlskdIndexerSettings settings)
+        public async Task DeleteAllSearchesAsync(SlskdIndexerSettings settings)
         {
-            foreach (var sEntry in GetSearches(settings))
+            var searches = await GetSearchesAsync(settings).ConfigureAwait(false);
+
+            foreach (var sEntry in searches)
             {
-                DeleteSearch(settings, sEntry.Id);
+                await DeleteSearchAsync(settings, sEntry.Id).ConfigureAwait(false);
             }
         }
 
-        public void DeleteSearch(SlskdSettings settings, string searchId)
+        public async Task DeleteSearchAsync(SlskdSettings settings, string searchId)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/searches/{searchId}");
 
             request.Method = HttpMethod.Delete;
 
-            ProcessRequest(request);
+            await ProcessRequestAsync(request).ConfigureAwait(false);
         }
 
-        public List<SlskdDownloadEntry> GetAllDownloads(SlskdSettings settings)
+        public async Task<List<SlskdDownloadEntry>> GetAllDownloadsAsync(SlskdSettings settings)
         {
             var request = BuildRequest(settings)
                 .Resource("/api/v0/transfers/downloads/");
-            return ProcessRequest<List<SlskdDownloadEntry>>(request);
+            return await ProcessRequestAsync<List<SlskdDownloadEntry>>(request).ConfigureAwait(false);
         }
 
-        public List<DownloadClientItem> GetQueue(SlskdSettings settings)
+        public async Task<List<DownloadClientItem>> GetQueueAsync(SlskdSettings settings)
         {
-            var options = GetOptions(settings);
+            var options = await GetOptionsAsync(settings).ConfigureAwait(false);
 
-            var allDownloads = GetAllDownloads(settings);
+            var allDownloads = await GetAllDownloadsAsync(settings).ConfigureAwait(false);
 
             var downloadDirectories = allDownloads
                 .Where(d => d != null)
@@ -265,7 +287,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return item;
         }
 
-        public bool DownloadFiles(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload)
+        public async Task<bool> DownloadFilesAsync(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/transfers/downloads/{username}")
@@ -273,28 +295,45 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             request.SetJsonData(filesToDownload.ToJson());
 
-            return ProcessRequest(request).StatusCode == HttpStatusCode.Created;
+            var result = await ProcessRequestAsync(request).ConfigureAwait(false);
+
+            return result.StatusCode == HttpStatusCode.Created;
         }
 
-        public SlskdFile GetDownload(SlskdSettings settings, string username, string downloadId)
+        public async Task<SlskdFile> GetDownloadAsync(SlskdSettings settings, string username, string downloadId)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/transfers/downloads/{username}/{downloadId}");
-            return ProcessRequest<SlskdFile>(request);
+            return await ProcessRequestAsync<SlskdFile>(request).ConfigureAwait(false);
         }
 
-        public void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false)
+        public async Task<SlskdFile> WaitDownloadToCompleteAsync(SlskdSettings settings, string username, string downloadId)
+        {
+            SlskdFile download;
+
+            do
+            {
+                download = await GetDownloadAsync(settings, username, downloadId).ConfigureAwait(false);
+
+                await Task.Delay(500).ConfigureAwait(false);
+            }
+            while (download.State < SlskdStates.CompletedSucceeded);
+
+            return download;
+        }
+
+        public async Task CancelDownloadAsync(SlskdSettings settings, string username, string downloadId, bool remove = false)
         {
             var request = BuildRequest(settings)
                 .Resource($"/api/v0/transfers/downloads/{username}/{downloadId}")
                 .AddQueryParam("remove", remove);
             request.Method = HttpMethod.Delete;
-            ProcessRequest(request);
+            await ProcessRequestAsync(request).ConfigureAwait(false);
         }
 
         public async Task RemoveFromQueueAsync(SlskdSettings settings, DownloadClientItem downloadItem)
         {
-            var allDownloads = GetAllDownloads(settings);
+            var allDownloads = await GetAllDownloadsAsync(settings).ConfigureAwait(false);
 
             // TODO: We should only have a single match but this will do for now
             // TODO: I think we might have cases with multiple artists in a single directory?
@@ -302,38 +341,27 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             {
                 var filesToRemove = entry.Directories
                     .Where(directory => Md5StringConverter.ComputeMd5(directory.Directory) == downloadItem.DownloadId)
-                    .SelectMany(directory => directory.Files);
+                    .SelectMany(directory => directory.Files)
+                    .ToArray();
 
-                foreach (var file in filesToRemove)
+                await Task.WhenAll(filesToRemove.Select(async file =>
                 {
-                    // TODO: We could do this asynchronously but I'm not sure if slskd likes to receive too many requests at the same time
-                    //       (I think I read about it in an open issue in their github repository)
+                    // If the download is still in progress then cancel it first
                     if (file.State < SlskdStates.CompletedSucceeded)
                     {
-                        // Cancel the download first since the download hasn't completed
-                        CancelDownload(settings, entry.Username, file.Id);
+                        await CancelDownloadAsync(settings, entry.Username, file.Id).ConfigureAwait(false);
 
                         // Wait for its status to be 'Completed'
-                        await WaitForFileToComplete(settings, file).ConfigureAwait(false);
+                        await WaitDownloadToCompleteAsync(settings, entry.Username, file.Id).ConfigureAwait(false);
                     }
 
                     // Finally delete it
-                    CancelDownload(settings, entry.Username, file.Id, true);
-                }
+                    await CancelDownloadAsync(settings, entry.Username, file.Id, true).ConfigureAwait(false);
+                })).ConfigureAwait(false);
             }
         }
 
-        private async Task WaitForFileToComplete(SlskdSettings settings, SlskdFile file)
-        {
-            while (file.State < SlskdStates.CompletedSucceeded)
-            {
-                file = GetDownload(settings, file.Username, file.Id);
-
-                await Task.Delay(500).ConfigureAwait(false);
-            }
-        }
-
-        public string Download(SlskdSettings settings, ReleaseInfo release)
+        public async Task<string> DownloadAsync(SlskdSettings settings, ReleaseInfo release)
         {
             // Parse the guid
             var matches = Regex.Match(release.Guid, "(Slskd)-(.+)");
@@ -351,10 +379,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             var username = release.DownloadUrl;
 
             // Retrieve the list of files to download
-            var sResponses = GetSearchResponses(settings, searchId);
+            var sResponses = await GetSearchResponsesAsync(settings, searchId).ConfigureAwait(false);
 
             // We can remove the search entry at this point
-            DeleteSearch(settings, searchId);
+            await DeleteSearchAsync(settings, searchId).ConfigureAwait(false);
 
             // Find the Responses for that specific user
             var userResponse = sResponses.FirstOrDefault(r => r.Username == username);
@@ -376,7 +404,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             // Send the download request
-            if (!DownloadFiles(settings, username, filesToDownload))
+            var downloaded = await DownloadFilesAsync(settings, username, filesToDownload).ConfigureAwait(false);
+
+            if (!downloaded)
             {
                 throw new DownloadClientException("Error adding item to Slskd.");
             }
@@ -402,23 +432,24 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }.SetHeader("X-API-KEY", settings.ApiKey);
         }
 
-        private TResult ProcessRequest<TResult>(JsonRequestBuilder requestBuilder)
+        private async Task<TResult> ProcessRequestAsync<TResult>(JsonRequestBuilder requestBuilder)
             where TResult : new()
         {
-            var responseContent = ProcessRequest(requestBuilder).Content;
+            var response = await ProcessRequestAsync(requestBuilder).ConfigureAwait(false);
 
-            return Json.Deserialize<TResult>(responseContent);
+            return Json.Deserialize<TResult>(response.Content);
         }
 
-        private HttpResponse ProcessRequest(JsonRequestBuilder requestBuilder)
+        private async Task<HttpResponse> ProcessRequestAsync(JsonRequestBuilder requestBuilder)
         {
             var request = requestBuilder.Build();
+
             requestBuilder.LogResponseContent = true;
             requestBuilder.SuppressHttpErrorStatusCodes = new[] { HttpStatusCode.Forbidden };
 
             try
             {
-                return _httpClient.Execute(request);
+                return await _httpClient.ExecuteAsync(request).ConfigureAwait(false);
             }
             catch (HttpException ex)
             {
@@ -430,13 +461,13 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
         }
 
-        public void Authenticate(SlskdSettings settings)
+        public async Task AuthenticateAsync(SlskdSettings settings)
         {
             var request = BuildRequest(settings)
                 .Resource("/api/v0/application")
                 .Build();
 
-            var response = _httpClient.Execute(request);
+            var response = await _httpClient.ExecuteAsync(request).ConfigureAwait(false);
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
@@ -448,13 +479,13 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             throw new DownloadClientException("The APIKEY is wrong.");
         }
 
-        public void Authenticate(SlskdIndexerSettings settings)
+        public async Task AuthenticateAsync(SlskdIndexerSettings settings)
         {
             var request = BuildRequest(settings)
                 .Resource("/api/v0/application")
                 .Build();
 
-            var response = _httpClient.Execute(request);
+            var response = await _httpClient.ExecuteAsync(request).ConfigureAwait(false);
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
