@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Crypto;
@@ -33,8 +34,9 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         List<DownloadClientItem> GetQueue(SlskdSettings settings);
         string Download(SlskdSettings settings, ReleaseInfo release);
         bool DownloadFiles(SlskdSettings settings, string username, List<SlskdResponseFile> filesToDownload);
+        SlskdFile GetDownload(SlskdSettings settings, string username, string downloadId);
         void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false);
-        void RemoveFromQueue(SlskdSettings settings, DownloadClientItem downloadItem);
+        Task RemoveFromQueueAsync(SlskdSettings settings, DownloadClientItem downloadItem);
         public void Authenticate(SlskdSettings settings);
         public void Authenticate(SlskdIndexerSettings settings);
     }
@@ -208,6 +210,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             DownloadItemStatus status;
 
+            // TODO: Check canceled items
             if (statuses.All(s => s == DownloadItemStatus.Queued))
             {
                 status = DownloadItemStatus.Queued;
@@ -273,6 +276,13 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return ProcessRequest(request).StatusCode == HttpStatusCode.Created;
         }
 
+        public SlskdFile GetDownload(SlskdSettings settings, string username, string downloadId)
+        {
+            var request = BuildRequest(settings)
+                .Resource($"/api/v0/transfers/downloads/{username}/{downloadId}");
+            return ProcessRequest<SlskdFile>(request);
+        }
+
         public void CancelDownload(SlskdSettings settings, string username, string downloadId, bool remove = false)
         {
             var request = BuildRequest(settings)
@@ -282,7 +292,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             ProcessRequest(request);
         }
 
-        public void RemoveFromQueue(SlskdSettings settings, DownloadClientItem downloadItem)
+        public async Task RemoveFromQueueAsync(SlskdSettings settings, DownloadClientItem downloadItem)
         {
             var allDownloads = GetAllDownloads(settings);
 
@@ -296,10 +306,30 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
                 foreach (var file in filesToRemove)
                 {
-                    // TODO: We have to cancel the download before actually removing it or slskd would return an error
-                    // TODO: Check the file status and either just cancel or remove it
-                    CancelDownload(settings, entry.Username, file.Id, false);
+                    // TODO: We could do this asynchronously but I'm not sure if slskd likes to receive too many requests at the same time
+                    //       (I think I read about it in an open issue in their github repository)
+                    if (file.State < SlskdStates.CompletedSucceeded)
+                    {
+                        // Cancel the download first since the download hasn't completed
+                        CancelDownload(settings, entry.Username, file.Id);
+
+                        // Wait for its status to be 'Completed'
+                        await WaitForFileToComplete(settings, file).ConfigureAwait(false);
+                    }
+
+                    // Finally delete it
+                    CancelDownload(settings, entry.Username, file.Id, true);
                 }
+            }
+        }
+
+        private async Task WaitForFileToComplete(SlskdSettings settings, SlskdFile file)
+        {
+            while (file.State < SlskdStates.CompletedSucceeded)
+            {
+                file = GetDownload(settings, file.Username, file.Id);
+
+                await Task.Delay(500).ConfigureAwait(false);
             }
         }
 
