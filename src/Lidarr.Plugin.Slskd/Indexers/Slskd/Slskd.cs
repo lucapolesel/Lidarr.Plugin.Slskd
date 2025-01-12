@@ -1,9 +1,9 @@
 using System;
 using NLog;
-using NzbDrone.Common.Cache;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download.Clients.Slskd;
+using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Indexers.Slskd
@@ -14,21 +14,26 @@ namespace NzbDrone.Core.Indexers.Slskd
         public override string Protocol => nameof(SlskdDownloadProtocol);
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
-        public override int PageSize => 100;
+        public override int PageSize => 250;
         public override TimeSpan RateLimit => new TimeSpan(0);
 
         private readonly ISlskdProxy _slskdProxy;
+        private readonly IArtistService _artistService;
+        private readonly IAlbumService _albumService;
 
-        public Slskd(ICacheManager cacheManager,
-            ISlskdProxy slskdProxy,
+        public Slskd(ISlskdProxy slskdProxy,
             IHttpClient httpClient,
             IIndexerStatusService indexerStatusService,
             IConfigService configService,
             IParsingService parsingService,
+            IArtistService artistService,
+            IAlbumService albumService,
             Logger logger)
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
             _slskdProxy = slskdProxy;
+            _artistService = artistService;
+            _albumService = albumService;
         }
 
         public override IIndexerRequestGenerator GetRequestGenerator()
@@ -50,7 +55,9 @@ namespace NzbDrone.Core.Indexers.Slskd
             {
                 Proxy = _slskdProxy,
                 Settings = Settings,
-                Logger = _logger
+                Logger = _logger,
+                ArtistService = _artistService,
+                AlbumService = _albumService,
             };
         }
     }

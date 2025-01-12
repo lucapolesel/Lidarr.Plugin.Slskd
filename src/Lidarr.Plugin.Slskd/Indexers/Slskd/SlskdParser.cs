@@ -4,11 +4,13 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web;
 using NLog;
 using NzbDrone.Common.Crypto;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Download.Clients.Slskd;
+using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
@@ -32,6 +34,8 @@ namespace NzbDrone.Core.Indexers.Slskd
         public ISlskdProxy Proxy { get; set; }
         public SlskdIndexerSettings Settings { get; set; }
         public Logger Logger { get; set; }
+        public IArtistService ArtistService { get; set; }
+        public IAlbumService AlbumService { get; set; }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse response)
         {
@@ -44,7 +48,31 @@ namespace NzbDrone.Core.Indexers.Slskd
             var albumNameHeader = request.HttpRequest.Headers["SLSKD-ALBUM"];
 
             var artistName = HttpUtility.UrlDecode(artistNameHeader, Encoding.UTF8);
-            var albumName = HttpUtility.UrlDecode(albumNameHeader, Encoding.UTF8);
+            var albumTitle = HttpUtility.UrlDecode(albumNameHeader, Encoding.UTF8);
+
+            // Retrieve the artist by id
+            var artist = ArtistService.FindByName(artistName);
+            var artistAliases = new List<string>();
+
+            Album album = null;
+
+            // In case we are performing the RSS request
+            if (artist != null)
+            {
+                var artistMetadata = artist.Metadata.Value;
+
+                artistAliases = new List<string>
+                {
+                    artist.Name
+                };
+
+                // Append aliases cleaning their title
+                artistAliases.AddRange(artistMetadata.Aliases);
+
+                album = AlbumService.FindByTitle(artistMetadata.Id, albumTitle);
+            }
+
+            var releaseTitle = $"{artistName} - {albumTitle}";
 
             var searchResponse = Json.Deserialize<SlskdSearchEntry>(response.Content);
 
@@ -52,11 +80,12 @@ namespace NzbDrone.Core.Indexers.Slskd
             var searchEntry = Proxy.WaitSearchToComplete(Settings, searchResponse.Id)
                 .ConfigureAwait(false).GetAwaiter().GetResult();
 
-            // TODO: Check what to do in case it fails
-            if (searchEntry.State > SlskdStates.CompletedSucceeded)
+            // Delete if failed
+            if (searchEntry.State > SlskdStates.CompletedFileLimitReached)
             {
-                // Delete it since it failed
                 _ = Proxy.DeleteSearchAsync(Settings, searchEntry.Id);
+
+                return torrentInfos;
             }
 
             // Parse each response
@@ -66,13 +95,6 @@ namespace NzbDrone.Core.Indexers.Slskd
                 if (r.FileCount == 0)
                 {
                     continue;
-                }
-
-                var title = artistName;
-
-                if (!string.IsNullOrEmpty(albumName))
-                {
-                    title += $" - {albumName}";
                 }
 
                 // Group each file by their directory since a user might have different releases
@@ -89,6 +111,12 @@ namespace NzbDrone.Core.Indexers.Slskd
                         continue;
                     }
 
+                    // We want it to detect the artist name and album at least
+                    if (album != null && !MatchRelease(dir.Key, artistAliases.ToArray(), album.Title))
+                    {
+                        continue;
+                    }
+
                     // Generate a MD5 hash for this directory so we can later use it to identify the files we need
                     var releaseHash = Md5StringConverter.ComputeMd5(dir.Key);
 
@@ -97,8 +125,8 @@ namespace NzbDrone.Core.Indexers.Slskd
                     {
                         Guid = $"Slskd-{releaseHash}",
                         Artist = artistName,
-                        Album = albumName,
-                        Title = title,
+                        Album = albumTitle,
+                        Title = releaseTitle,
                         InfoUrl = searchEntry.Id,
                         DownloadUrl = r.Username,
                         DownloadProtocol = nameof(SlskdDownloadProtocol),
@@ -161,6 +189,31 @@ namespace NzbDrone.Core.Indexers.Slskd
                 torrentInfos
                     .OrderByDescending(o => o.Size)
                     .ToArray();
+        }
+
+        private static bool MatchRelease(string path, string[] artistAliases, string albumName)
+        {
+            var normalizedPath = Normalize(path);
+
+            var aliasPattern = string.Join("|", artistAliases.Select(Normalize));
+
+            // Check for alias followed by the album name
+            var closeInfoRegex = $@"\b({aliasPattern})\b.*\b({Regex.Escape(Normalize(albumName))})\b";
+
+            return Regex.IsMatch(normalizedPath, closeInfoRegex, RegexOptions.IgnoreCase);
+        }
+
+        private static string Normalize(string input)
+        {
+            var normalizedString = input.ToLowerInvariant();
+
+            // Preserve words only
+            normalizedString = Regex.Replace(normalizedString, @"[^\p{L}\p{N}\s]", " ");
+
+            // Normalize whitespaces
+            normalizedString = Regex.Replace(normalizedString, @"\s+", " ");
+
+            return normalizedString.Trim();
         }
 
         private static FileQualityInfo GuessFileQuality(SlskdResponseFile file)

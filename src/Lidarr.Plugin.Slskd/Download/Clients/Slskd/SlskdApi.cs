@@ -188,14 +188,14 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         InProgress,
         [EnumMember(Value = "Completed, Succeeded")]
         CompletedSucceeded,
-        [EnumMember(Value = "Completed, Cancelled")]
-        CompletedCancelled,
-        [EnumMember(Value = "Completed, TimedOut")]
-        CompletedTimedOut,
         [EnumMember(Value = "Completed, ResponseLimitReached")]
         CompletedResponseLimitReached,
         [EnumMember(Value = "Completed, FileLimitReached")]
         CompletedFileLimitReached,
+        [EnumMember(Value = "Completed, Cancelled")]
+        CompletedCancelled,
+        [EnumMember(Value = "Completed, TimedOut")]
+        CompletedTimedOut,
         [EnumMember(Value = "Completed, Errored")]
         CompletedErrored,
         [EnumMember(Value = "Completed, Rejected")]
