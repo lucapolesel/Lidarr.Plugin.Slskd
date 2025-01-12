@@ -192,10 +192,10 @@ namespace NzbDrone.Core.Download.Clients.Slskd
         CompletedResponseLimitReached,
         [EnumMember(Value = "Completed, FileLimitReached")]
         CompletedFileLimitReached,
-        [EnumMember(Value = "Completed, Cancelled")]
-        CompletedCancelled,
         [EnumMember(Value = "Completed, TimedOut")]
         CompletedTimedOut,
+        [EnumMember(Value = "Completed, Cancelled")]
+        CompletedCancelled,
         [EnumMember(Value = "Completed, Errored")]
         CompletedErrored,
         [EnumMember(Value = "Completed, Rejected")]

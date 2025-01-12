@@ -81,7 +81,7 @@ namespace NzbDrone.Core.Indexers.Slskd
                 .ConfigureAwait(false).GetAwaiter().GetResult();
 
             // Delete if failed
-            if (searchEntry.State > SlskdStates.CompletedFileLimitReached)
+            if (searchEntry.State > SlskdStates.CompletedTimedOut)
             {
                 _ = Proxy.DeleteSearchAsync(Settings, searchEntry.Id);
 
