@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -10,11 +9,13 @@ using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Crypto;
 using NzbDrone.Common.Disk;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.History;
 using NzbDrone.Core.Indexers.Slskd;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Plugins.Slskd;
 
 namespace NzbDrone.Core.Download.Clients.Slskd
 {
@@ -174,7 +175,8 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             var downloadDirectories = allDownloads
                 .Where(d => d != null)
                 .SelectMany(user => user.Directories)
-                .Select(d => ToDownloadClientItem(d, options))
+                .GroupBy(d => SlskdUtils.GroupPath(d.Directory, true))
+                .Select(g => ToDownloadClientItem(g, options))
                 .Where(i => i != null)
                 .ToList();
 
@@ -201,16 +203,22 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             return DownloadItemStatus.Failed;
         }
 
-        private DownloadClientItem ToDownloadClientItem(SlskdDirectory directory, SlskdOptions options)
+        private DownloadClientItem ToDownloadClientItem(IGrouping<string, SlskdDirectory> downloadGroup, SlskdOptions options)
         {
-            var averageSpeed = directory.Files
+            var commonDirectory = downloadGroup.Key;
+
+            var files = downloadGroup
+                .SelectMany(d => d.Files)
+                .ToArray();
+
+            var averageSpeed = files
                 .Select(file => file.AverageSpeed)
                 .Where(s => s > 0)
                 .DefaultIfEmpty(0)
                 .Average();
 
-            var totalSize = directory.Files.Sum(file => file.Size);
-            var bytesRemaining = directory.Files.Sum(file => file.BytesRemaining);
+            var totalSize = files.Sum(file => file.Size);
+            var bytesRemaining = files.Sum(file => file.BytesRemaining);
 
             TimeSpan? remainingTime = null;
 
@@ -226,7 +234,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             // TODO: This is wrong so fix it later (I forgot why it's wrong)
-            var statuses = directory.Files
+            var statuses = files
                 .Select(GetFileDownloadStatus)
                 .ToArray();
 
@@ -252,7 +260,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
 
             // Compute a DownloadId based off the directory
             // NOTE: It ain't pretty but, it should work just fine since we always (soontm) clear the downloads
-            var downloadId = Md5StringConverter.ComputeMd5(directory.Directory);
+            var downloadId = Md5StringConverter.ComputeMd5(commonDirectory);
 
             // Retrieve the album data from the history service
             var releaseInfo = _historyService
@@ -265,10 +273,11 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             // Slskd trims down everything like username and only outputs to the last path
-            var downloadsPath = options.Directories.Downloads;
-            var releasePath = directory.Directory[(directory.Directory.LastIndexOf('\\') + 1) ..];
+            var downloadsPath = new OsPath(options.Directories.Downloads, OsPathKind.Unix);
+            var releasePath = new OsPath(commonDirectory, OsPathKind.Unix);
 
-            var outputPath = Path.Combine(downloadsPath, releasePath!);
+            // Combine
+            var outputPath = downloadsPath + releasePath;
 
             var item = new DownloadClientItem
             {
@@ -280,7 +289,7 @@ namespace NzbDrone.Core.Download.Clients.Slskd
                 Status = status,
                 CanMoveFiles = true,
                 CanBeRemoved = true,
-                OutputPath = new OsPath(outputPath),
+                OutputPath = outputPath,
                 Category = "music",
             };
 
@@ -393,14 +402,24 @@ namespace NzbDrone.Core.Download.Clients.Slskd
             }
 
             // We only want the files that are in the requested directory
-            var filesToDownload = userResponse.Files
-                .GroupBy(f => f.Filename[..f.Filename.LastIndexOf('\\')])
+            var releaseFiles = userResponse.Files
+                .GroupBy(f => SlskdUtils.GroupPath(f.Filename, false))
                 .FirstOrDefault(g => Md5StringConverter.ComputeMd5(g.Key) == releaseId)?
                 .ToList();
 
-            if (filesToDownload == null)
+            if (releaseFiles.Empty())
             {
                 throw new DownloadClientException("Unable to retrieve files per releaseId.");
+            }
+
+            // Download media files only
+            var filesToDownload = SlskdUtils.GetValidMediaFiles(releaseFiles)
+                .Select(f => f.ResponseFile)
+                .ToList();
+
+            if (filesToDownload.Empty())
+            {
+                throw new DownloadClientException("Unable to locate any valid file to download from the releaseId.");
             }
 
             // Send the download request

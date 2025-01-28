@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Web;
 using NLog;
@@ -9,15 +8,6 @@ using NzbDrone.Core.IndexerSearch.Definitions;
 
 namespace NzbDrone.Core.Indexers.Slskd
 {
-    public enum SearchType
-    {
-        ArtistOnly,
-        AlbumOnly,
-        AliasOnly,
-        ArtistAndAlbum,
-        AliasAndAlbum,
-    }
-
     public class SlskdRequestGenerator : IIndexerRequestGenerator
     {
         private const int PageSize = 250;
@@ -31,7 +21,7 @@ namespace NzbDrone.Core.Indexers.Slskd
         {
             var chain = new IndexerPageableRequestChain();
 
-            chain.Add(GetRequests(SearchType.ArtistAndAlbum, "Brakence", "Bhavana"));
+            chain.Add(GetRequests("Brakence", "Bhavana"));
 
             return chain;
         }
@@ -40,61 +30,20 @@ namespace NzbDrone.Core.Indexers.Slskd
         {
             var chain = new IndexerPageableRequestChain();
 
-            var artistName = searchCriteria.Artist.Name;
-
-            // Lidarr only appends one album to the list
-            var albumName = searchCriteria.Albums.First().Title;
-
-            // Lidarr provides us all the artist metadata
-            var artistMetadata = searchCriteria.Artist.Metadata.Value;
-
-            // Chain the first request with 'base' queries
-            chain.AddTier(GetRequests(SearchType.ArtistAndAlbum, artistName, albumName));
-
-            // Chain a request with just the album title
-            chain.AddTier(GetRequests(SearchType.AlbumOnly, artistName, albumName));
-
-            // Chain just the artist name and aliases, we will do the matching later on
-            chain.AddTier(GetRequests(SearchType.ArtistOnly, artistName, albumName));
-
-            foreach (var alias in artistMetadata.Aliases)
-            {
-                chain.AddTier(GetRequests(SearchType.AliasOnly, artistName, albumName, alias));
-            }
-
-            // TODO: I'm currently testing by using them at the end since we implemented the path matching
-            // Some artists may have more aliases so chain a request for each of them as last resort
-            foreach (var alias in artistMetadata.Aliases)
-            {
-                chain.AddTier(GetRequests(SearchType.AliasAndAlbum, artistName, albumName, alias));
-            }
+            chain.AddTier(GetRequests(searchCriteria.Artist.Name, searchCriteria.AlbumTitle));
 
             return chain;
         }
 
         public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
-            var chain = new IndexerPageableRequestChain();
-
-            // TODO: Check what Lidarr wants in case of full artist searches (we have the metadata and we could scrape everything ourselves)
-            // chain.AddTier(GetRequests(searchCriteria.ArtistQuery));
-            return chain;
+            // TODO: We will implement this later on
+            return new IndexerPageableRequestChain();
         }
 
-        // TODO: This is ugly af so change it later on
-        private IEnumerable<IndexerRequest> GetRequests(SearchType searchType, string artistName, string albumTitle = "", string artistAlias = "")
+        private IEnumerable<IndexerRequest> GetRequests(string artistName, string albumTitle = "")
         {
-            var searchQuery = searchType switch
-            {
-                SearchType.ArtistOnly => artistName,
-                SearchType.AlbumOnly => albumTitle,
-                SearchType.AliasOnly => artistAlias,
-                SearchType.ArtistAndAlbum => $"{artistName} {albumTitle}",
-                SearchType.AliasAndAlbum => $"{artistAlias} {albumTitle}",
-                _ => ""
-            };
-
-            searchQuery = searchQuery.Trim();
+            var searchQuery = $"{artistName} {albumTitle}".Trim();
 
             if (string.IsNullOrEmpty(searchQuery))
             {

@@ -20,6 +20,7 @@ namespace NzbDrone.Core.Indexers.Slskd
         private readonly ISlskdProxy _slskdProxy;
         private readonly IArtistService _artistService;
         private readonly IAlbumService _albumService;
+        private readonly ITrackService _trackService;
 
         public Slskd(ISlskdProxy slskdProxy,
             IHttpClient httpClient,
@@ -28,12 +29,14 @@ namespace NzbDrone.Core.Indexers.Slskd
             IParsingService parsingService,
             IArtistService artistService,
             IAlbumService albumService,
+            ITrackService trackService,
             Logger logger)
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
             _slskdProxy = slskdProxy;
             _artistService = artistService;
             _albumService = albumService;
+            _trackService = trackService;
         }
 
         public override IIndexerRequestGenerator GetRequestGenerator()
@@ -58,6 +61,7 @@ namespace NzbDrone.Core.Indexers.Slskd
                 Logger = _logger,
                 ArtistService = _artistService,
                 AlbumService = _albumService,
+                TrackService = _trackService,
             };
         }
     }
